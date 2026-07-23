@@ -19,22 +19,32 @@ const records = parse(readFileSync(csvPath), {
   skip_empty_lines: true,
 });
 
-if (records.length === 0) {
-  console.log("CSV にレコードがありません。JSON は更新しません");
-  process.exit(0);
-}
-
-const headers = Object.keys(records[0]);
-const column = findDisplayNameColumn(headers, config.displayNameColumnPattern);
-if (!column) {
-  console.error(`DisplayName 列が見つかりません。ヘッダー: ${headers.join(" / ")}`);
-  console.error(`config.json の displayNameColumnPattern を調整してください`);
+// 0 件は「誤ったCSVの取得」の可能性があるため安全側で失敗させ、前回の JSON を維持する。
+// 販売開始前など正当な 0 件は ALLOW_EMPTY=1 で明示的に許可する
+if (records.length === 0 && process.env.ALLOW_EMPTY !== "1") {
+  console.error("CSV が 0 件です。誤取得の可能性があるため中断します（正当な 0 件なら ALLOW_EMPTY=1）");
   process.exit(1);
 }
-console.log(`DisplayName 列: "${column}"`);
 
 const salt = process.env.HASH_SALT ?? "";
-const hashes = buildHashes(records, column, salt);
+// 無塩だと DisplayName の辞書照合が容易になるため public 運用ではソルト必須
+if (salt === "") {
+  console.error("HASH_SALT が未設定です。ワールド側と共有するソルトを設定してください");
+  process.exit(1);
+}
+
+let hashes = [];
+if (records.length > 0) {
+  const headers = Object.keys(records[0]);
+  const column = findDisplayNameColumn(headers, config.displayNameColumnPattern);
+  if (!column) {
+    console.error(`DisplayName 列が見つかりません。ヘッダー: ${headers.join(" / ")}`);
+    console.error(`config.json の displayNameColumnPattern を調整してください`);
+    process.exit(1);
+  }
+  console.log(`DisplayName 列: "${column}"`);
+  hashes = buildHashes(records, column, salt);
+}
 
 const outPath = resolve(root, config.outputPath);
 if (existsSync(outPath)) {

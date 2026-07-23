@@ -38,14 +38,16 @@ jobs:
         run: npm run build
         env:
           HASH_SALT: ${{ secrets.HASH_SALT }}
+          ALLOW_EMPTY: ${{ vars.ALLOW_EMPTY }}
 
       - name: 変更があれば commit & push
         run: |
-          if ! git diff --quiet docs/tickets.json 2>/dev/null || [ -n "$(git status --porcelain docs/tickets.json)" ]; then
+          if [ -n "$(git status --porcelain docs/tickets.json)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add docs/tickets.json
             git commit -m "chore: チケットハッシュ JSON を更新"
+            git pull --rebase origin main
             git push
           else
             echo "変更なし"

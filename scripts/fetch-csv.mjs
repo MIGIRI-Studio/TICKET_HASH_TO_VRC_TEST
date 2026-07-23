@@ -51,6 +51,10 @@ try {
   }
 
   console.log(`現在のページ: ${page.url()}`);
+  // 想定外のページで CSV リンクを誤クリックしないよう、参加者ページにいることを確認する
+  if (!page.url().includes("/participants")) {
+    throw new Error(`参加者ページに到達できませんでした: ${page.url()}`);
+  }
 
   const csvTrigger = page
     .locator('a, button')

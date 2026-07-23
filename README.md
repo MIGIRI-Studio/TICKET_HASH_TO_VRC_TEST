@@ -25,7 +25,7 @@ VRChat ワールド (VRCStringDownloader)
 | --- | --- |
 | `ZAIKO_EMAIL` | Zaiko クリエイターアカウントのメールアドレス |
 | `ZAIKO_PASSWORD` | 同パスワード |
-| `HASH_SALT` | 任意。設定する場合はワールド側にも同じ値を埋め込む |
+| `HASH_SALT` | **必須**。ランダムな文字列（例: `openssl rand -hex 16` で生成）。ワールド側にも同じ値を埋め込む。運用開始後に変更すると全ハッシュが変わるので固定する |
 
 ### 2. GitHub Pages 有効化
 
@@ -66,11 +66,13 @@ npm test
 
 `hashes` は `sha256(lower(trim(displayName)) + HASH_SALT)` の hex 表現。重複排除・ソート済み。
 
+CSV が 0 件のときは誤取得の可能性があるため JSON を更新せず失敗する（前回の内容を維持）。販売開始前など正当な 0 件を許可する場合は、リポジトリの **Settings → Secrets and variables → Actions → Variables** に `ALLOW_EMPTY=1` を設定する（ローカルでは env で指定）。
+
 ## VRChat ワールド側の実装メモ
 
 - [UdonHashLib](https://github.com/GlitchyDev/UdonHashLib) の `SHA256_UTF8` を使用
 - 照合前の正規化を必ず一致させる: `Networking.LocalPlayer.displayName.Trim().ToLower()`
-- `HASH_SALT` を設定した場合は正規化後の文字列に連結してからハッシュ化
+- `HASH_SALT` の値を正規化後の文字列に連結してからハッシュ化する
 - `*.github.io` は VRChat の信頼済み URL なので String Loading がデフォルト設定で動く
 
 ## 注意事項
