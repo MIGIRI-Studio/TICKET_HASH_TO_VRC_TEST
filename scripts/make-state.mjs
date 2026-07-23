@@ -3,6 +3,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createInterface } from "node:readline";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const statePath = resolve(root, "data/state.json");
@@ -10,12 +11,17 @@ const statePath = resolve(root, "data/state.json");
 console.log(`Safari で creators.zaiko.io にログイン後、Web インスペクタ → ネットワークタブで
 参加者ページのリクエストを右クリック → 「cURL としてコピー」した内容を貼り付けてください。
 （curl コマンド全体でも、Cookie ヘッダの中身だけでも OK）
-貼り付けたら Enter → Ctrl-D で確定。
+貼り付けたら Enter をもう一度（空行）で確定。
 `);
 
-const chunks = [];
-for await (const chunk of process.stdin) chunks.push(chunk);
-const input = Buffer.concat(chunks).toString("utf8").trim();
+const lines = [];
+const rl = createInterface({ input: process.stdin });
+for await (const line of rl) {
+  if (line.trim() === "" && lines.length > 0) break;
+  lines.push(line);
+}
+rl.close();
+const input = lines.join("\n").trim();
 
 if (input === "") {
   console.error("入力が空です。中断します");
