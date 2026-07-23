@@ -25,15 +25,32 @@ if (!hasState && (!email || !password)) {
 }
 
 const headed = process.env.HEADED === "1";
-const browser = await chromium.launch({ headless: !headed });
+
 // headless の既定 UA は CloudFront に弾かれるため、通常ブラウザの UA を名乗る
-const context = await browser.newContext({
-  userAgent:
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-  locale: "ja-JP",
-  ...(hasState ? { storageState: statePath } : {}),
-});
-const page = await context.newPage();
+const UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+// Turnstile は自動化ブラウザを検出して人間のクリックでも失敗させるため、
+// navigator.webdriver 等の自動化シグナルを外す（チャレンジ自体は人間が解く）
+const launchOptions = {
+  headless: !headed,
+  args: ["--disable-blink-features=AutomationControlled"],
+  ignoreDefaultArgs: ["--enable-automation"],
+};
+
+let context;
+let browser = null;
+if (hasState) {
+  browser = await chromium.launch(launchOptions);
+  context = await browser.newContext({ userAgent: UA, locale: "ja-JP", storageState: statePath });
+} else {
+  // 初回ログインは永続プロファイルで行い、Cookie をローカルにも残す
+  context = await chromium.launchPersistentContext(resolve(root, "data/profile"), {
+    ...launchOptions,
+    userAgent: UA,
+    locale: "ja-JP",
+  });
+}
+const page = context.pages()[0] ?? (await context.newPage());
 
 try {
   await page.goto(config.participantsUrl, { waitUntil: "domcontentloaded" });
@@ -107,5 +124,6 @@ try {
   console.error(`スクリーンショット: ${shot}（ローカル調査用・コミット禁止）`);
   process.exitCode = 1;
 } finally {
-  await browser.close();
+  await context.close();
+  await browser?.close();
 }
