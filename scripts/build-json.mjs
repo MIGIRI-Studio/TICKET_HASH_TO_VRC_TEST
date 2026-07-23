@@ -2,7 +2,7 @@ import { parse } from "csv-parse/sync";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildHashes, findDisplayNameColumn } from "../src/hash.mjs";
+import { buildHashes, extractAnswer, findColumnIndex } from "../src/hash.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const config = JSON.parse(readFileSync(resolve(root, "config.json"), "utf8"));
@@ -13,11 +13,14 @@ if (!existsSync(csvPath)) {
   process.exit(1);
 }
 
-const records = parse(readFileSync(csvPath), {
-  columns: true,
+// アンケートの質問・回答はヘッダーのない末尾フィールドに並ぶため、配列のまま扱う
+const rows = parse(readFileSync(csvPath), {
   bom: true,
   skip_empty_lines: true,
+  relax_column_count: true,
 });
+const headers = rows[0] ?? [];
+const records = rows.slice(1);
 
 // 0 件は「誤ったCSVの取得」の可能性があるため安全側で失敗させ、前回の JSON を維持する。
 // 販売開始前など正当な 0 件は ALLOW_EMPTY=1 で明示的に許可する
@@ -35,15 +38,21 @@ if (salt === "") {
 
 let hashes = [];
 if (records.length > 0) {
-  const headers = Object.keys(records[0]);
-  const column = findDisplayNameColumn(headers, config.displayNameColumnPattern);
-  if (!column) {
-    console.error(`DisplayName 列が見つかりません。ヘッダー: ${headers.join(" / ")}`);
-    console.error(`config.json の displayNameColumnPattern を調整してください`);
+  const idx = findColumnIndex(headers, config.answersColumnPattern);
+  if (idx === -1) {
+    console.error(`アンケート回答列が見つかりません。ヘッダー: ${headers.join(" / ")}`);
+    console.error(`config.json の answersColumnPattern を調整してください`);
     process.exit(1);
   }
-  console.log(`DisplayName 列: "${column}"`);
-  hashes = buildHashes(records, column, salt);
+  const names = records.map((r) =>
+    extractAnswer(r.slice(idx).join("\n"), config.displayNameQuestionPattern),
+  );
+  const missing = names.filter((n) => n == null).length;
+  if (missing > 0) {
+    console.warn(`注意: ${missing} 件のレコードでディスプレイネーム回答が見つかりませんでした`);
+  }
+  console.log(`有効回答: ${names.length - missing}/${names.length} 件`);
+  hashes = buildHashes(names, salt);
 }
 
 const outPath = resolve(root, config.outputPath);

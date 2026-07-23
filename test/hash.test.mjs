@@ -4,7 +4,8 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
   buildHashes,
-  findDisplayNameColumn,
+  extractAnswer,
+  findColumnIndex,
   hashDisplayName,
   normalizeDisplayName,
 } from "../src/hash.mjs";
@@ -21,13 +22,30 @@ test("hashDisplayName は正規化後の SHA-256 hex を返す", () => {
   assert.equal(hashDisplayName("yukke", "salt1"), sha256("yukkesalt1"));
 });
 
-test("findDisplayNameColumn はパターンに合う列名を返す", () => {
-  const headers = ["注文番号", "メールアドレス", "VRChatのDisplayNameを入力してください"];
-  assert.equal(
-    findDisplayNameColumn(headers, "displayname|display name|vrchat"),
-    "VRChatのDisplayNameを入力してください",
-  );
-  assert.equal(findDisplayNameColumn(["注文番号"], "vrchat"), null);
+test("findColumnIndex はパターンに合う列の位置を返す", () => {
+  const headers = ["チケット", "名", "姓", "質問の回答", ""];
+  assert.equal(findColumnIndex(headers, "質問の回答"), 3);
+  assert.equal(findColumnIndex(["注文番号"], "質問の回答"), -1);
+});
+
+test("extractAnswer は質問の次のフィールドを回答として返す", () => {
+  // Zaiko の実 CSV: 「質問の回答」列以降に質問と回答が交互に並ぶ（改行連結して渡す）
+  const cell = [
+    "", // 「質問の回答」列自体は空
+    "ディスプレイネームを入力してください",
+    "takaomi",
+    "VRChatのアカウントURLを教えてください",
+    "https://vrchat.com/home/user/usr_addb97d3-bc04-4051-ac04-6071281fba5b",
+    "AdHocライブ",
+    "AdHocライブA インスタンス",
+  ].join("\n");
+  const pattern = "ディスプレイネーム|displayname|display name";
+  assert.equal(extractAnswer(cell, pattern), "takaomi");
+  assert.equal(extractAnswer("AdHocライブ\nAdHocライブA インスタンス", pattern), null);
+  assert.equal(extractAnswer("", pattern), null);
+  assert.equal(extractAnswer(null, pattern), null);
+  // 質問はあるが回答が空行
+  assert.equal(extractAnswer("ディスプレイネームを入力してください\n\n次の質問", pattern), null);
 });
 
 // gas/Code.gs の selfTest() と共有する golden vector。
@@ -40,13 +58,6 @@ test("golden vector と一致する（GAS 実装とのパリティ保証）", ()
 });
 
 test("buildHashes は空値を除外し、重複を排除してソートする", () => {
-  const records = [
-    { name: "Alice" },
-    { name: " alice " },
-    { name: "" },
-    { name: null },
-    { name: "Bob" },
-  ];
-  const hashes = buildHashes(records, "name");
+  const hashes = buildHashes(["Alice", " alice ", "", null, "Bob"]);
   assert.deepEqual(hashes, [sha256("alice"), sha256("bob")].sort());
 });

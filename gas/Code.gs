@@ -18,7 +18,8 @@
 const REPO = "MIGIRI-Studio/TICKET_HASH_TO_VRC_TEST";
 const BRANCH = "main";
 const JSON_PATH = "docs/tickets.json";
-const COLUMN_PATTERN = /displayname|display name|vrchat/i;
+const ANSWERS_COLUMN_PATTERN = /質問の回答/;
+const QUESTION_PATTERN = /ディスプレイネーム|displayname|display name/i;
 
 function setup() {
   ScriptApp.getProjectTriggers().forEach((t) => ScriptApp.deleteTrigger(t));
@@ -80,18 +81,33 @@ function csvToHashes_(text, salt, allowEmpty) {
   if (rows.length < 1 || rows[0].length === 0) throw new Error("CSV を解析できませんでした");
 
   const headers = rows[0];
-  const col = headers.findIndex((h) => COLUMN_PATTERN.test(h));
+  const col = headers.findIndex((h) => ANSWERS_COLUMN_PATTERN.test(h));
   if (col === -1) {
-    throw new Error(`DisplayName 列が見つかりません。ヘッダー: ${headers.join(" / ")}`);
+    throw new Error(`アンケート回答列が見つかりません。ヘッダー: ${headers.join(" / ")}`);
   }
 
-  const records = rows.slice(1).map((r) => (r[col] || "").trim()).filter((v) => v !== "");
-  if (records.length === 0 && !allowEmpty) {
-    throw new Error("CSV の回答が 0 件です。誤ったファイルの可能性があるため反映を中断しました");
+  const names = rows
+    .slice(1)
+    .map((r) => extractAnswer_(r.slice(col).join("\n")))
+    .filter((v) => v !== null && v.trim() !== "");
+  if (names.length === 0 && !allowEmpty) {
+    throw new Error("ディスプレイネームの回答が 0 件です。誤ったファイルの可能性があるため反映を中断しました");
   }
 
-  const hashes = records.map((name) => sha256Hex_(name.toLowerCase() + salt));
+  const hashes = names.map((name) => sha256Hex_(name.trim().toLowerCase() + salt));
   return [...new Set(hashes)].sort();
+}
+
+// アンケートは「質問の回答」列以降に「質問, 回答, 質問, 回答…」と交互に並ぶ
+// （src/hash.mjs の extractAnswer と同一ロジック。フィールドを改行連結して渡す）
+function extractAnswer_(cell) {
+  const lines = String(cell)
+    .split(/\r?\n/)
+    .map((l) => l.trim());
+  for (let i = 0; i < lines.length - 1; i++) {
+    if (QUESTION_PATTERN.test(lines[i]) && lines[i + 1] !== "") return lines[i + 1];
+  }
+  return null;
 }
 
 function sha256Hex_(s) {

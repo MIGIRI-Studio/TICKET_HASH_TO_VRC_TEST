@@ -90,7 +90,7 @@ base64 -i data/state.json | pbcopy   # → Secret ZAIKO_STORAGE_STATE_B64 に貼
 失敗時は `data/debug.png` にスクリーンショットが残る（個人情報を含みうるためコミット禁止。`data/` は gitignore 済み）。
 
 - ログイン検出やボタン検出に失敗する場合は `scripts/fetch-csv.mjs` のセレクタを実際の DOM に合わせて調整する
-- DisplayName 列の検出は `config.json` の `displayNameColumnPattern`（正規表現、大文字小文字無視）で調整する
+- アンケートは「質問の回答」列以降に「質問, 回答, 質問, 回答…」と交互に並ぶ形式。検出は `config.json` の `answersColumnPattern`（回答開始列）と `displayNameQuestionPattern`（ディスプレイネームを聞く質問文、正規表現・大文字小文字無視）で調整する。アンケートの質問文に「ディスプレイネーム」を含めること
 
 ### 4. Actions の確認
 

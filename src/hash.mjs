@@ -12,14 +12,26 @@ export function hashDisplayName(name, salt = "") {
     .digest("hex");
 }
 
-export function findDisplayNameColumn(headers, pattern) {
+export function findColumnIndex(headers, pattern) {
   const re = new RegExp(pattern, "i");
-  return headers.find((h) => re.test(h)) ?? null;
+  return headers.findIndex((h) => re.test(h));
 }
 
-export function buildHashes(records, columnName, salt = "") {
-  const hashes = records
-    .map((r) => r[columnName])
+// Zaiko のアンケートは「質問の回答」列以降のヘッダーなしフィールドに
+// 「質問, 回答, 質問, 回答…」と交互に並ぶ。フィールドを改行連結した文字列を渡す
+export function extractAnswer(cell, questionPattern) {
+  const re = new RegExp(questionPattern, "i");
+  const lines = String(cell ?? "")
+    .split(/\r?\n/)
+    .map((l) => l.trim());
+  for (let i = 0; i < lines.length - 1; i++) {
+    if (re.test(lines[i]) && lines[i + 1] !== "") return lines[i + 1];
+  }
+  return null;
+}
+
+export function buildHashes(names, salt = "") {
+  const hashes = names
     .filter((v) => v != null && String(v).trim() !== "")
     .map((v) => hashDisplayName(v, salt));
   return [...new Set(hashes)].sort();
