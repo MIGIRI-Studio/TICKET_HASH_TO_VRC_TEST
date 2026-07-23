@@ -1,0 +1,18 @@
+{
+  "name": "ticket-hash-to-vrc",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "fetch": "node --env-file-if-exists=.env scripts/fetch-csv.mjs",
+    "build": "node scripts/build-json.mjs",
+    "update": "npm run fetch && npm run build",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "csv-parse": "^5.6.0",
+    "playwright": "^1.50.0"
+  }
+}

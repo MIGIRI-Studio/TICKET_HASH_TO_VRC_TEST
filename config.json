@@ -1,0 +1,6 @@
+{
+  "participantsUrl": "https://creators.zaiko.io/migiri/events/383426/participants?answers_context=pre_purchase&ticket=203940",
+  "displayNameColumnPattern": "displayname|display name|vrchat",
+  "csvPath": "data/participants.csv",
+  "outputPath": "docs/tickets.json"
+}
