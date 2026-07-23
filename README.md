@@ -26,6 +26,7 @@ VRChat ワールド (VRCStringDownloader)
 | `ZAIKO_EMAIL` | Zaiko クリエイターアカウントのメールアドレス |
 | `ZAIKO_PASSWORD` | 同パスワード |
 | `HASH_SALT` | **必須**。ランダムな文字列（例: `openssl rand -hex 16` で生成）。ワールド側にも同じ値を埋め込む。運用開始後に変更すると全ハッシュが変わるので固定する |
+| `ZAIKO_STORAGE_STATE_B64` | 任意。CI のログインが Cloudflare Turnstile に阻まれる場合、ローカルでログイン成功後に `base64 -i data/state.json` した値を登録するとセッション再利用でログインをスキップできる |
 
 ### 2. GitHub Pages 有効化
 

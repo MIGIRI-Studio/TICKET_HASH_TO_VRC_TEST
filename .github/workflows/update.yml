@@ -33,6 +33,7 @@ jobs:
         env:
           ZAIKO_EMAIL: ${{ secrets.ZAIKO_EMAIL }}
           ZAIKO_PASSWORD: ${{ secrets.ZAIKO_PASSWORD }}
+          ZAIKO_STORAGE_STATE_B64: ${{ secrets.ZAIKO_STORAGE_STATE_B64 }}
 
       - name: ハッシュ JSON 生成
         run: npm run build
