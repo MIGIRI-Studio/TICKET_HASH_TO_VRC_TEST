@@ -4,16 +4,41 @@ Zaiko のチケット購入時アンケート（VRChat DisplayName）を自動�
 
 ## 仕組み
 
+更新経路は2つあり、どちらも同じ `docs/tickets.json` を更新する:
+
 ```
-GitHub Actions (毎時 cron)
-  → Playwright で creators.zaiko.io にログイン
+【経路1: 全自動】GitHub Actions (毎時 cron)
+  → Playwright で creators.zaiko.io にログイン（保存済みセッションを再利用）
   → 参加者ページからアンケート CSV をダウンロード
   → DisplayName を正規化 (trim + 小文字化) → SHA-256 → docs/tickets.json
-  → 変更があれば commit & push → GitHub Pages が自動配信
+  → 変更があれば commit & push
+
+【経路2: 手動投入・非エンジニア向け】Google Drive + Apps Script (gas/Code.gs)
+  → 運用者が Zaiko 管理画面から CSV をダウンロードし、Drive の投入フォルダに入れる
+  → 5分おきの GAS トリガーが CSV を検出 → 同じ正規化・ハッシュ化 → GitHub API で push
+  → 処理結果をメール通知、CSV は自動でゴミ箱へ
+
 VRChat ワールド (VRCStringDownloader)
   → https://migiri-studio.github.io/TICKET_HASH_TO_VRC_TEST/tickets.json を取得
   → ローカルプレイヤーの DisplayName を同じ手順でハッシュ化して照合
 ```
+
+経路1のセッションが失効して Actions が失敗している間も、経路2で運用を継続できる。
+
+## 運用者向けガイド（普段の作業はこれだけ）
+
+1. Zaiko の管理画面にログインし、[参加者ページ](https://creators.zaiko.io/migiri/events/383426/participants?answers_context=pre_purchase&ticket=203940)から CSV をダウンロード
+2. ダウンロードした CSV を Google Drive の「**チケット投入フォルダ**」に入れる（ドラッグ&ドロップ）
+3. 数分以内に「反映完了」メールが届けば完了。エラーメールが届いたら本文の指示に従う
+
+## GAS（経路2）のセットアップ
+
+`gas/Code.gs` の冒頭コメント参照。要点:
+
+1. Drive に投入用フォルダを作成し、運用者に共有
+2. [script.google.com](https://script.google.com) で新規プロジェクト → `gas/Code.gs` を貼り付け
+3. スクリプト プロパティに `FOLDER_ID` / `GITHUB_TOKEN`（fine-grained PAT、このリポジトリのみ・Contents: Read and write）/ `HASH_SALT`（Secrets と同じ値）/ `NOTIFY_EMAIL` を設定
+4. `setup()` を一度実行してトリガー登録
 
 ## セットアップ
 
