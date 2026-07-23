@@ -7,6 +7,7 @@
   },
   "scripts": {
     "fetch": "node --env-file-if-exists=.env scripts/fetch-csv.mjs",
+    "make-state": "node scripts/make-state.mjs",
     "build": "node scripts/build-json.mjs",
     "update": "npm run fetch && npm run build",
     "test": "node --test"

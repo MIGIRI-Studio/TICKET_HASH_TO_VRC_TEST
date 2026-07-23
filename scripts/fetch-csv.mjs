@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+import { chromium, firefox, webkit } from "playwright";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,29 +25,45 @@ if (!hasState && (!email || !password)) {
 }
 
 const headed = process.env.HEADED === "1";
+// Turnstile の自動化検出は Chromium 向けが強いため、BROWSER=webkit / firefox も選べる
+const engineName = process.env.BROWSER || "chromium";
+const engine = { chromium, firefox, webkit }[engineName];
+if (!engine) {
+  console.error(`BROWSER は chromium / firefox / webkit のいずれかを指定してください: ${engineName}`);
+  process.exit(1);
+}
 
-// headless の既定 UA は CloudFront に弾かれるため、通常ブラウザの UA を名乗る
-const UA =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-// Turnstile は自動化ブラウザを検出して人間のクリックでも失敗させるため、
-// navigator.webdriver 等の自動化シグナルを外す（チャレンジ自体は人間が解く）
+// Chromium: headless の既定 UA は CloudFront に弾かれるため通常ブラウザの UA を名乗り、
+// 人間が Turnstile を解けるよう自動化シグナル (navigator.webdriver 等) を外す
+const chromiumOnly = {
+  launch: {
+    args: ["--disable-blink-features=AutomationControlled"],
+    ignoreDefaultArgs: ["--enable-automation"],
+  },
+  context: {
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  },
+};
 const launchOptions = {
   headless: !headed,
-  args: ["--disable-blink-features=AutomationControlled"],
-  ignoreDefaultArgs: ["--enable-automation"],
+  ...(engineName === "chromium" ? chromiumOnly.launch : {}),
+};
+const contextOptions = {
+  locale: "ja-JP",
+  ...(engineName === "chromium" ? chromiumOnly.context : {}),
 };
 
 let context;
 let browser = null;
 if (hasState) {
-  browser = await chromium.launch(launchOptions);
-  context = await browser.newContext({ userAgent: UA, locale: "ja-JP", storageState: statePath });
+  browser = await engine.launch(launchOptions);
+  context = await browser.newContext({ ...contextOptions, storageState: statePath });
 } else {
   // 初回ログインは永続プロファイルで行い、Cookie をローカルにも残す
-  context = await chromium.launchPersistentContext(resolve(root, "data/profile"), {
+  context = await engine.launchPersistentContext(resolve(root, `data/profile-${engineName}`), {
     ...launchOptions,
-    userAgent: UA,
-    locale: "ja-JP",
+    ...contextOptions,
   });
 }
 const page = context.pages()[0] ?? (await context.newPage());

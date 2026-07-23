@@ -55,6 +55,13 @@ base64 -i data/state.json | pbcopy   # → Secret ZAIKO_STORAGE_STATE_B64 に貼
 
 セッションが失効すると Actions が失敗し始めるので、そのときは再度 `HEADED=1 npm run fetch` → Secret を更新する。
 
+#### Turnstile がクリックしても通らない場合
+
+自動化ブラウザ自体が弾かれている。回避手段を順に試す:
+
+1. **WebKit エンジンで実行**: `BROWSER=webkit HEADED=1 npm run fetch`（`npx playwright install webkit` が必要）
+2. **通常ブラウザから Cookie を移す**: Safari で creators.zaiko.io にログイン（「ログイン情報を記憶」ON）→ 開発メニュー → Web インスペクタ → ストレージ → Cookie から `creators.zaiko.io` / `zaiko.io` の Cookie を確認し、`npm run make-state` に「名前 値 ドメイン」を1行ずつ貼り付けて `data/state.json` を生成 → `npm run fetch` で確認
+
 失敗時は `data/debug.png` にスクリーンショットが残る（個人情報を含みうるためコミット禁止。`data/` は gitignore 済み）。
 
 - ログイン検出やボタン検出に失敗する場合は `scripts/fetch-csv.mjs` のセレクタを実際の DOM に合わせて調整する
