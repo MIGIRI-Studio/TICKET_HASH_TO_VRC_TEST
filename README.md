@@ -85,7 +85,7 @@ base64 -i data/state.json | pbcopy   # → Secret ZAIKO_STORAGE_STATE_B64 に貼
 自動化ブラウザ自体が弾かれている。回避手段を順に試す:
 
 1. **WebKit エンジンで実行**: `BROWSER=webkit HEADED=1 npm run fetch`（`npx playwright install webkit` が必要）
-2. **通常ブラウザから Cookie を移す**: Safari で creators.zaiko.io にログイン（「ログイン情報を記憶」ON）→ 開発メニュー → Web インスペクタ → ストレージ → Cookie から `creators.zaiko.io` / `zaiko.io` の Cookie を確認し、`npm run make-state` に「名前 値 ドメイン」を1行ずつ貼り付けて `data/state.json` を生成 → `npm run fetch` で確認
+2. **通常ブラウザから Cookie を移す**: Safari で creators.zaiko.io にログイン（「ログイン情報を記憶」ON）→ 参加者ページを開く → 開発メニュー → Web インスペクタ → **ネットワーク**タブ → ページを再読み込み → 一番上のドキュメントリクエストを右クリック → **「cURL としてコピー」** → `npm run make-state` に貼り付けて Enter → Ctrl-D。ストレージタブからの手動コピーは値が表示上省略・デコードされて壊れるため使わないこと
 
 失敗時は `data/debug.png` にスクリーンショットが残る（個人情報を含みうるためコミット禁止。`data/` は gitignore 済み）。
 
