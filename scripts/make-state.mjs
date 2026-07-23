@@ -1,30 +1,26 @@
 // 通常ブラウザでログインしたセッションから Playwright 用の data/state.json を作るヘルパー。
-// Web インスペクタの「cURL としてコピー」の貼り付けを想定（Cookie ヘッダを完全な形で取れる）
+// Web インスペクタの「cURL としてコピー」直後に実行すると、クリップボードから直接読み取る
+// （ターミナルへの貼り付けは1行の長さ制限で途中で切れるため使わない）
+import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createInterface } from "node:readline";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const statePath = resolve(root, "data/state.json");
 
-console.log(`Safari で creators.zaiko.io にログイン後、Web インスペクタ → ネットワークタブで
-参加者ページのリクエストを右クリック → 「cURL としてコピー」した内容を貼り付けてください。
-（curl コマンド全体でも、Cookie ヘッダの中身だけでも OK）
-貼り付けたら Enter をもう一度（空行）で確定。
-`);
-
-const lines = [];
-const rl = createInterface({ input: process.stdin });
-for await (const line of rl) {
-  if (line.trim() === "" && lines.length > 0) break;
-  lines.push(line);
+let input;
+if (process.stdin.isTTY) {
+  input = execSync("pbpaste", { encoding: "utf8", maxBuffer: 10 * 1024 * 1024 }).trim();
+  console.log(`クリップボードから ${input.length} 文字を読み取りました`);
+} else {
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(chunk);
+  input = Buffer.concat(chunks).toString("utf8").trim();
 }
-rl.close();
-const input = lines.join("\n").trim();
 
 if (input === "") {
-  console.error("入力が空です。中断します");
+  console.error("入力が空です。Safari で「cURL としてコピー」してから実行してください");
   process.exit(1);
 }
 
@@ -37,8 +33,10 @@ if (curlMatch) {
 } else if (!input.startsWith("curl")) {
   cookieHeader = input.replace(/^[Cc]ookie:\s*/, "");
 }
-if (!cookieHeader) {
-  console.error("Cookie ヘッダを見つけられませんでした。「cURL としてコピー」した内容をそのまま貼り付けてください");
+if (!cookieHeader || !cookieHeader.includes("=")) {
+  console.error("Cookie ヘッダを見つけられませんでした。");
+  console.error("Safari の ネットワークタブ → 参加者ページのリクエストを右クリック → 「cURL としてコピー」の直後に実行してください");
+  console.error(`読み取った先頭部分: ${input.slice(0, 80)}`);
   process.exit(1);
 }
 
