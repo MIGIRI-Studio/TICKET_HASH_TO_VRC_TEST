@@ -52,11 +52,24 @@ try {
     await page.locator("#checkboxRemember").check({ force: true }).catch(() => {});
 
     await page.locator('form input[type="submit"], form button[type="submit"]').first().click();
-    await page
-      .waitForURL((url) => !url.toString().includes("/login"), { timeout: 30000 })
-      .catch(() => {
-        throw new Error("ログインに失敗しました（認証情報、または Cloudflare Turnstile のチャレンジを確認）");
-      });
+    const leftLogin = (timeout) =>
+      page
+        .waitForURL((url) => !url.toString().includes("/login"), { timeout })
+        .then(() => true)
+        .catch(() => false);
+
+    let loggedIn = await leftLogin(15000);
+    // Turnstile が対話チャレンジを出した場合は人間に完了してもらう（自動突破はしない）
+    if (!loggedIn && headed) {
+      console.log("");
+      console.log("→ ブラウザで「私はロボットではありません」をクリックし、ログインボタンを押してください（最大5分待ちます）");
+      loggedIn = await leftLogin(300000);
+    }
+    if (!loggedIn) {
+      throw new Error(
+        "ログインに失敗しました。HEADED=1 で実行し、Cloudflare のチェックを手動で完了してください（成功するとセッションが保存され、以降は不要になります）",
+      );
+    }
 
     await context.storageState({ path: statePath });
     console.log(`セッションを保存しました: ${statePath}`);

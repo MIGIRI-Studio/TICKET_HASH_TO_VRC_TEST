@@ -34,17 +34,26 @@ VRChat ワールド (VRCStringDownloader)
 
 配信 URL: `https://migiri-studio.github.io/TICKET_HASH_TO_VRC_TEST/tickets.json`
 
-### 3. ローカルで動作確認
+### 3. 初回ログイン（ローカル・人間の操作が1回必要）
 
-Zaiko のログインフォームや CSV ボタンのセレクタは汎用検出なので、初回は必ずローカルの headed モードで確認する:
+Zaiko のログインフォームには Cloudflare Turnstile があるため、初回は headed モードで実行し、ブラウザに出る「私はロボットではありません」を手動でクリックする:
 
 ```sh
 npm ci
+npx playwright install chromium
 cp .env.example .env   # 認証情報を記入
-HEADED=1 npm run fetch # ブラウザが開き、ログイン → CSV ダウンロードまで自動実行
+HEADED=1 npm run fetch # フォームは自動入力される。Turnstile のチェックとログインだけ手動で行う
 npm run build          # data/participants.csv → docs/tickets.json
 npm test
 ```
+
+ログインに成功するとセッションが `data/state.json` に保存され、以降の実行はログイン自体をスキップする。CI 用にはこれを base64 化して Secret に登録する:
+
+```sh
+base64 -i data/state.json | pbcopy   # → Secret ZAIKO_STORAGE_STATE_B64 に貼り付け
+```
+
+セッションが失効すると Actions が失敗し始めるので、そのときは再度 `HEADED=1 npm run fetch` → Secret を更新する。
 
 失敗時は `data/debug.png` にスクリーンショットが残る（個人情報を含みうるためコミット禁止。`data/` は gitignore 済み）。
 
