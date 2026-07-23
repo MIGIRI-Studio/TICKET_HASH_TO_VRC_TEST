@@ -21,16 +21,28 @@ const rl = createInterface({ input: process.stdin });
 for await (const line of rl) {
   const trimmed = line.trim();
   if (trimmed === "") break;
-  const parts = trimmed.split(/[\t ]+/);
+  // タブ区切り（インスペクタからのコピー）を優先し、なければ空白区切り
+  const parts = (trimmed.includes("\t") ? trimmed.split("\t") : trimmed.split(/ +/))
+    .map((s) => s.trim())
+    .filter((s) => s !== "");
   if (parts.length < 2) {
     console.error(`  スキップ（名前と値の2つが必要）: ${trimmed.slice(0, 40)}`);
     continue;
   }
-  const [name, value, domain] = parts;
+  const name = parts[0];
+  let valueParts = parts.slice(1);
+  let domain = "creators.zaiko.io";
+  const last = valueParts[valueParts.length - 1];
+  if (valueParts.length >= 2 && /^\.?[\w-]+(\.[\w-]+)+$/.test(last)) {
+    domain = last;
+    valueParts = valueParts.slice(0, -1);
+  }
+  // 先頭ドットなしは host-only 扱いになりサブドメインに送られないため正規化する
+  if (!domain.startsWith(".")) domain = `.${domain}`;
   cookies.push({
     name,
-    value,
-    domain: domain ?? "creators.zaiko.io",
+    value: valueParts.join(""),
+    domain,
     path: "/",
     // 実際の有効期限は不明なので180日先を指定（サーバ側で失効したら再取得）
     expires: Math.floor(Date.now() / 1000) + 180 * 24 * 60 * 60,
@@ -38,7 +50,7 @@ for await (const line of rl) {
     secure: true,
     sameSite: "Lax",
   });
-  console.log(`  追加: ${name} (${domain ?? "creators.zaiko.io"})`);
+  console.log(`  追加: ${name} (${domain})`);
 }
 
 if (cookies.length === 0) {

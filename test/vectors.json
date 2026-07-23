@@ -1,0 +1,22 @@
+[
+  {
+    "name": "  Yukke_VRC  ",
+    "salt": "s1",
+    "expected": "7ab859c119adbc821dce569ba2b64d416f66a3935d44d143767e042f62a8b1e3"
+  },
+  {
+    "name": "ミギリちゃん",
+    "salt": "塩テスト",
+    "expected": "a1c77ec6aadca66f9ead7e22891b3a723f683e263a295281e39e64f5eeb7afc6"
+  },
+  {
+    "name": "ALLCAPS",
+    "salt": "",
+    "expected": "108d42d4b0bb58b0c6862711d3633fe07801206270f227b8a1628672a00ad8ba"
+  },
+  {
+    "name": "MiXeD Case Name",
+    "salt": "2a5d",
+    "expected": "a787ed30e14e52a55b0d7e0cb4acc871f0c328da1628e37152f4e37911b6384e"
+  }
+]

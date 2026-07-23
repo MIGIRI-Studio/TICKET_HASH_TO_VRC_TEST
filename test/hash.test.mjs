@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import {
   buildHashes,
   findDisplayNameColumn,
@@ -27,6 +28,15 @@ test("findDisplayNameColumn はパターンに合う列名を返す", () => {
     "VRChatのDisplayNameを入力してください",
   );
   assert.equal(findDisplayNameColumn(["注文番号"], "vrchat"), null);
+});
+
+// gas/Code.gs の selfTest() と共有する golden vector。
+// GAS 側実装とハッシュが一致し続けることを保証するため、値は変更禁止
+test("golden vector と一致する（GAS 実装とのパリティ保証）", () => {
+  const vectors = JSON.parse(readFileSync(new URL("./vectors.json", import.meta.url), "utf8"));
+  for (const v of vectors) {
+    assert.equal(hashDisplayName(v.name, v.salt), v.expected, `name=${JSON.stringify(v.name)}`);
+  }
 });
 
 test("buildHashes は空値を除外し、重複を排除してソートする", () => {
