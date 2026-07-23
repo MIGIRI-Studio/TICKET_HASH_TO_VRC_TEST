@@ -1,0 +1,55 @@
+# Zaiko からアンケート CSV を取得し、ハッシュ JSON を docs/ に反映する
+name: update-tickets
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: update-tickets
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      - name: Zaiko から CSV 取得
+        run: npm run fetch
+        env:
+          ZAIKO_EMAIL: ${{ secrets.ZAIKO_EMAIL }}
+          ZAIKO_PASSWORD: ${{ secrets.ZAIKO_PASSWORD }}
+          ZAIKO_STORAGE_STATE_B64: ${{ secrets.ZAIKO_STORAGE_STATE_B64 }}
+
+      - name: ハッシュ JSON 生成
+        run: npm run build
+        env:
+          HASH_SALT: ${{ secrets.HASH_SALT }}
+          ALLOW_EMPTY: ${{ vars.ALLOW_EMPTY }}
+
+      - name: 変更があれば commit & push
+        run: |
+          if [ -n "$(git status --porcelain docs/tickets.json)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add docs/tickets.json
+            git commit -m "chore: チケットハッシュ JSON を更新"
+            git pull --rebase origin main
+            git push
+          else
+            echo "変更なし"
+          fi
