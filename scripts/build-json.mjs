@@ -44,15 +44,34 @@ if (records.length > 0) {
     console.error(`config.json の answersColumnPattern を調整してください`);
     process.exit(1);
   }
-  const names = records.map((r) =>
-    extractAnswer(r.slice(idx).join("\n"), config.displayNameQuestionPattern),
-  );
-  const missing = names.filter((n) => n == null).length;
-  if (missing > 0) {
-    console.warn(`注意: ${missing} 件のレコードでディスプレイネーム回答が見つかりませんでした`);
+  const entries = records.map((r) => {
+    const fields = r.slice(idx);
+    return {
+      name: extractAnswer(fields, config.displayNameQuestionPattern),
+      instance: extractAnswer(fields, config.instanceQuestionPattern),
+    };
+  });
+  const missingName = entries.filter((e) => e.name == null).length;
+  const missingInstance = entries.filter((e) => e.instance == null).length;
+  if (missingName > 0) {
+    console.warn(`注意: ${missingName} 件のレコードで DisplayName 回答が見つかりませんでした`);
   }
-  console.log(`有効回答: ${names.length - missing}/${names.length} 件`);
-  hashes = buildHashes(names, salt);
+  if (missingInstance > 0) {
+    console.warn(`注意: ${missingInstance} 件のレコードでインスタンス回答が見つかりませんでした`);
+  }
+  const valid = entries.filter((e) => e.name != null && e.instance != null).length;
+  console.log(`有効回答: ${valid}/${entries.length} 件`);
+  // 一部の行だけ抽出に失敗した状態で縮んだ JSON を配信すると、その購入者が
+  // 入場不可になるため既定では中断する（質問文変更や CSV 形式ズレの検知）
+  if ((missingName > 0 || missingInstance > 0) && process.env.ALLOW_PARTIAL !== "1") {
+    console.error("回答を抽出できない行があります。config.json の質問文パターンが CSV と一致しているか確認してください（欠損行を除外して続行するなら ALLOW_PARTIAL=1）");
+    process.exit(1);
+  }
+  if (valid === 0 && process.env.ALLOW_EMPTY !== "1") {
+    console.error("有効回答が 0 件です。config.json の質問文パターンが CSV と一致しているか確認してください（正当な 0 件なら ALLOW_EMPTY=1）");
+    process.exit(1);
+  }
+  hashes = buildHashes(entries, salt);
 }
 
 const outPath = resolve(root, config.outputPath);

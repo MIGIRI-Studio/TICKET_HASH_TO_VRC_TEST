@@ -9,6 +9,7 @@
 //    - HASH_SALT:    GitHub Secrets と同じ値
 //    - NOTIFY_EMAIL: 通知先（省略時はスクリプト所有者）
 //    - ALLOW_EMPTY:  "1" で 0 件 CSV を許可（通常は未設定）
+//    - ALLOW_PARTIAL: "1" で回答を抽出できない行を除外して続行（通常は未設定）
 // 4. setup() を一度実行（5分おきのトリガーが作られる。初回は権限承認ダイアログが出る）
 //
 // 運用（非エンジニア向け）:
@@ -19,7 +20,8 @@ const REPO = "MIGIRI-Studio/TICKET_HASH_TO_VRC_TEST";
 const BRANCH = "main";
 const JSON_PATH = "docs/tickets.json";
 const ANSWERS_COLUMN_PATTERN = /質問の回答/;
-const QUESTION_PATTERN = /ディスプレイネーム|displayname|display name/i;
+const DISPLAY_NAME_QUESTION_PATTERN = /VRChatのDisplayName/i;
+const INSTANCE_QUESTION_PATTERN = /チケットの種類/i;
 
 function setup() {
   ScriptApp.getProjectTriggers().forEach((t) => ScriptApp.deleteTrigger(t));
@@ -56,7 +58,12 @@ function run_() {
   const file = csvFiles[0];
 
   try {
-    const hashes = csvToHashes_(file.getBlob().getDataAsString("UTF-8"), salt, props.getProperty("ALLOW_EMPTY") === "1");
+    const hashes = csvToHashes_(
+      file.getBlob().getDataAsString("UTF-8"),
+      salt,
+      props.getProperty("ALLOW_EMPTY") === "1",
+      props.getProperty("ALLOW_PARTIAL") === "1",
+    );
     const result = publishToGitHub_(hashes, token);
     csvFiles.forEach((f) => f.setTrashed(true));
     notify_("[VRChatチケット] 反映完了", `${file.getName()} を処理しました。\n購入者ハッシュ: ${hashes.length} 件\n結果: ${result}`);
@@ -76,7 +83,7 @@ function listCsvFiles_(folder) {
   return files;
 }
 
-function csvToHashes_(text, salt, allowEmpty) {
+function csvToHashes_(text, salt, allowEmpty, allowPartial) {
   const rows = Utilities.parseCsv(text.replace(/^\uFEFF/, ""));
   if (rows.length < 1 || rows[0].length === 0) throw new Error("CSV を解析できませんでした");
 
@@ -86,26 +93,40 @@ function csvToHashes_(text, salt, allowEmpty) {
     throw new Error(`アンケート回答列が見つかりません。ヘッダー: ${headers.join(" / ")}`);
   }
 
-  const names = rows
-    .slice(1)
-    .map((r) => extractAnswer_(r.slice(col).join("\n")))
-    .filter((v) => v !== null && v.trim() !== "");
-  if (names.length === 0 && !allowEmpty) {
-    throw new Error("ディスプレイネームの回答が 0 件です。誤ったファイルの可能性があるため反映を中断しました");
+  const entries = rows.slice(1).map((r) => {
+    const fields = r.slice(col);
+    return {
+      name: extractAnswer_(fields, DISPLAY_NAME_QUESTION_PATTERN),
+      instance: extractAnswer_(fields, INSTANCE_QUESTION_PATTERN),
+    };
+  });
+  // 一部の行だけ抽出に失敗した状態で縮んだ JSON を配信すると、その購入者が
+  // 入場不可になるため既定では中断する（質問文変更や CSV 形式ズレの検知）
+  const missing = entries.filter((e) => e.name === null || e.instance === null).length;
+  if (missing > 0 && !allowPartial) {
+    throw new Error(
+      `回答を抽出できない行が ${missing} 件あります。質問文の変更や CSV 形式のズレの可能性があるため反映を中断しました（欠損行を除外して続行するならスクリプト プロパティ ALLOW_PARTIAL を "1" に設定）`,
+    );
+  }
+  const valid = entries.filter((e) => e.name !== null && e.instance !== null);
+  if (valid.length === 0 && !allowEmpty) {
+    throw new Error("DisplayName + インスタンスの回答が 0 件です。誤ったファイルの可能性があるため反映を中断しました");
   }
 
-  const hashes = names.map((name) => sha256Hex_(name.trim().toLowerCase() + salt));
+  // DisplayName とインスタンス名を "\n" 区切りで連結してハッシュ化（src/hash.mjs の hashTicket と同一）
+  const hashes = valid.map((e) => sha256Hex_(e.name.trim().toLowerCase() + "\n" + e.instance.trim().toLowerCase() + salt));
   return [...new Set(hashes)].sort();
 }
 
-// アンケートは「質問の回答」列以降に「質問, 回答, 質問, 回答…」と交互に並ぶ
-// （src/hash.mjs の extractAnswer と同一ロジック。フィールドを改行連結して渡す）
-function extractAnswer_(cell) {
-  const lines = String(cell)
-    .split(/\r?\n/)
-    .map((l) => l.trim());
-  for (let i = 0; i < lines.length - 1; i++) {
-    if (QUESTION_PATTERN.test(lines[i]) && lines[i + 1] !== "") return lines[i + 1];
+// アンケートは「質問の回答」列以降に「質問, 回答, 質問, 回答…」と交互に並ぶ。
+// 回答値が質問文と同じ文字列でも誤検出しないよう、質問位置だけをパターン照合する
+// （src/hash.mjs の extractAnswer と同一ロジック）
+function extractAnswer_(fields, pattern) {
+  const values = fields.map((f) => String(f).trim());
+  let start = 0;
+  while (start < values.length && values[start] === "") start++;
+  for (let i = start; i < values.length - 1; i += 2) {
+    if (pattern.test(values[i]) && values[i + 1] !== "") return values[i + 1];
   }
   return null;
 }
@@ -164,16 +185,43 @@ function publishToGitHub_(hashes, token) {
 // gas と Node (test/vectors.json) のハッシュ一致を確認する。GAS エディタから手動実行する
 function selfTest() {
   const vectors = [
-    { name: "  Yukke_VRC  ", salt: "s1", expected: "7ab859c119adbc821dce569ba2b64d416f66a3935d44d143767e042f62a8b1e3" },
-    { name: "ミギリちゃん", salt: "塩テスト", expected: "a1c77ec6aadca66f9ead7e22891b3a723f683e263a295281e39e64f5eeb7afc6" },
-    { name: "ALLCAPS", salt: "", expected: "108d42d4b0bb58b0c6862711d3633fe07801206270f227b8a1628672a00ad8ba" },
-    { name: "MiXeD Case Name", salt: "2a5d", expected: "a787ed30e14e52a55b0d7e0cb4acc871f0c328da1628e37152f4e37911b6384e" },
+    { name: "  Yukke_VRC  ", instance: "AdHocライブA インスタンス", salt: "s1", expected: "d02468ce28d808aca96a6b350088ceb477598ea0d4a553582309ce38e18acc12" },
+    { name: "ミギリちゃん", instance: "AdHocライブB インスタンス", salt: "塩テスト", expected: "a77228919b8447e9b689e62b74a4d84d8c35b0b50dc5aeb29748b3674c7c187e" },
+    { name: "ALLCAPS", instance: " Instance-1 ", salt: "", expected: "4645bc6149182392b2516dda49b498cbc82aec5eb754aeb2055f82bc0e286ed1" },
+    { name: "VRChatのDisplayName", instance: "チケットの種類", salt: "2a5d", expected: "54feb7327cda5cbb76c0a7666deaa00d3a0c0c1d300d2a95320864310e36d6c5" },
   ];
   for (const v of vectors) {
-    const actual = sha256Hex_(v.name.trim().toLowerCase() + v.salt);
+    const actual = sha256Hex_(v.name.trim().toLowerCase() + "\n" + v.instance.trim().toLowerCase() + v.salt);
     if (actual !== v.expected) {
       throw new Error(`ハッシュ不一致: ${v.name} → ${actual}（期待値 ${v.expected}）`);
     }
+  }
+
+  // CSV 抽出 → ハッシュ生成のパリティ確認（test/hash.test.mjs の fixture と同一。値は変更禁止）
+  // 行の内訳: 通常 / 先頭空フィールド + DisplayName が質問文と同一 / 重複ペア / インスタンス回答が空（除外）
+  const fixtureRows = [
+    ["VRChatのDisplayName", "takaomi", "VRChatのアカウントURLを教えてください", "https://example", "チケットの種類", "AdHocライブA インスタンス"],
+    ["", "VRChatのDisplayName", "VRChatのDisplayName", "VRChatのアカウントURLを教えてください", "https://example", "チケットの種類", "AdHocライブB インスタンス"],
+    ["VRChatのDisplayName", "takaomi", "VRChatのアカウントURLを教えてください", "https://example", "チケットの種類", "AdHocライブA インスタンス"],
+    ["VRChatのDisplayName", "nameonly", "チケットの種類", ""],
+  ];
+  const fixtureExpected = [
+    "644fc7bccc6500ca6965851312ad4cd6903e968bbf124191b672b1eb8f6c855f",
+    "aabebcc1076c663119490c77dad72301b7abc4116046555eee55f55c9f08ad0a",
+  ];
+  const fixtureHashes = [
+    ...new Set(
+      fixtureRows
+        .map((fields) => ({
+          name: extractAnswer_(fields, DISPLAY_NAME_QUESTION_PATTERN),
+          instance: extractAnswer_(fields, INSTANCE_QUESTION_PATTERN),
+        }))
+        .filter((e) => e.name !== null && e.instance !== null)
+        .map((e) => sha256Hex_(e.name.trim().toLowerCase() + "\n" + e.instance.trim().toLowerCase() + "fixture塩")),
+    ),
+  ].sort();
+  if (JSON.stringify(fixtureHashes) !== JSON.stringify(fixtureExpected)) {
+    throw new Error(`抽出パリティ不一致: ${JSON.stringify(fixtureHashes)}（期待値 ${JSON.stringify(fixtureExpected)}）`);
   }
   Logger.log("selfTest OK: Node 実装とハッシュが一致しています");
 }

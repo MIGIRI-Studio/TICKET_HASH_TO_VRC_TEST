@@ -1,22 +1,26 @@
 [
   {
     "name": "  Yukke_VRC  ",
+    "instance": "AdHocライブA インスタンス",
     "salt": "s1",
-    "expected": "7ab859c119adbc821dce569ba2b64d416f66a3935d44d143767e042f62a8b1e3"
+    "expected": "d02468ce28d808aca96a6b350088ceb477598ea0d4a553582309ce38e18acc12"
   },
   {
     "name": "ミギリちゃん",
+    "instance": "AdHocライブB インスタンス",
     "salt": "塩テスト",
-    "expected": "a1c77ec6aadca66f9ead7e22891b3a723f683e263a295281e39e64f5eeb7afc6"
+    "expected": "a77228919b8447e9b689e62b74a4d84d8c35b0b50dc5aeb29748b3674c7c187e"
   },
   {
     "name": "ALLCAPS",
+    "instance": " Instance-1 ",
     "salt": "",
-    "expected": "108d42d4b0bb58b0c6862711d3633fe07801206270f227b8a1628672a00ad8ba"
+    "expected": "4645bc6149182392b2516dda49b498cbc82aec5eb754aeb2055f82bc0e286ed1"
   },
   {
-    "name": "MiXeD Case Name",
+    "name": "VRChatのDisplayName",
+    "instance": "チケットの種類",
     "salt": "2a5d",
-    "expected": "a787ed30e14e52a55b0d7e0cb4acc871f0c328da1628e37152f4e37911b6384e"
+    "expected": "54feb7327cda5cbb76c0a7666deaa00d3a0c0c1d300d2a95320864310e36d6c5"
   }
 ]
