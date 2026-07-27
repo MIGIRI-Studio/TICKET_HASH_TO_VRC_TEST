@@ -1,6 +1,8 @@
 # TICKET_HASH_TO_VRC_TEST
 
-Zaiko のチケット購入時アンケート（VRChat DisplayName）を自動取得し、SHA-256 ハッシュ化した JSON を GitHub Pages で配信する。VRChat ワールド側はこの JSON と来場者の DisplayName を照合して入場判定を行う。
+Zaiko のチケット購入時アンケート（VRChat DisplayName + 入場インスタンス）を自動取得し、SHA-256 ハッシュ化した JSON を GitHub Pages で配信する。VRChat ワールド側はこの JSON と「来場者の DisplayName + 自インスタンス名」の組み合わせを照合して入場判定を行う。
+
+同一 DisplayName のユーザーが複数インスタンス分を購入するケース（1申込みにつき1インスタンス択一）があるため、ハッシュは (DisplayName, インスタンス名) ペア単位で生成する。
 
 ## 仕組み
 
@@ -10,7 +12,7 @@ Zaiko のチケット購入時アンケート（VRChat DisplayName）を自動�
 【経路1: 全自動】GitHub Actions (毎時 cron)
   → Playwright で creators.zaiko.io にログイン（保存済みセッションを再利用）
   → 参加者ページからアンケート CSV をダウンロード
-  → DisplayName を正規化 (trim + 小文字化) → SHA-256 → docs/tickets.json
+  → DisplayName とインスタンス名を正規化 (trim + 小文字化) → "\n" 区切りで連結 → SHA-256 → docs/tickets.json
   → 変更があれば commit & push
 
 【経路2: 手動投入・非エンジニア向け】Google Drive + Apps Script (gas/Code.gs)
@@ -20,7 +22,7 @@ Zaiko のチケット購入時アンケート（VRChat DisplayName）を自動�
 
 VRChat ワールド (VRCStringDownloader)
   → https://migiri-studio.github.io/TICKET_HASH_TO_VRC_TEST/tickets.json を取得
-  → ローカルプレイヤーの DisplayName を同じ手順でハッシュ化して照合
+  → ローカルプレイヤーの DisplayName + 自インスタンス名を同じ手順でハッシュ化して照合
 ```
 
 経路1のセッションが失効して Actions が失敗している間も、経路2で運用を継続できる。
@@ -90,7 +92,7 @@ base64 -i data/state.json | pbcopy   # → Secret ZAIKO_STORAGE_STATE_B64 に貼
 失敗時は `data/debug.png` にスクリーンショットが残る（個人情報を含みうるためコミット禁止。`data/` は gitignore 済み）。
 
 - ログイン検出やボタン検出に失敗する場合は `scripts/fetch-csv.mjs` のセレクタを実際の DOM に合わせて調整する
-- アンケートは「質問の回答」列以降に「質問, 回答, 質問, 回答…」と交互に並ぶ形式。検出は `config.json` の `answersColumnPattern`（回答開始列）と `displayNameQuestionPattern`（ディスプレイネームを聞く質問文、正規表現・大文字小文字無視）で調整する。アンケートの質問文に「ディスプレイネーム」を含めること
+- アンケートは「質問の回答」列以降に「質問, 回答, 質問, 回答…」と交互に並ぶ形式。回答値が質問文と同じ文字列でも誤検出しないよう、質問位置のフィールドだけをパターン照合している。検出は `config.json` の `answersColumnPattern`（回答開始列）/ `displayNameQuestionPattern`（DisplayName を聞く質問文）/ `instanceQuestionPattern`（入場インスタンスを聞く質問文）で調整する（いずれも正規表現・大文字小文字無視）。Zaiko の質問文は「VRChatのDisplayName」「チケットの種類」を含めること
 
 ### 4. Actions の確認
 
@@ -106,15 +108,18 @@ base64 -i data/state.json | pbcopy   # → Secret ZAIKO_STORAGE_STATE_B64 に貼
 }
 ```
 
-`hashes` は `sha256(lower(trim(displayName)) + HASH_SALT)` の hex 表現。重複排除・ソート済み。
+`hashes` は `sha256(lower(trim(displayName)) + "\n" + lower(trim(instanceName)) + HASH_SALT)` の hex 表現。(DisplayName, インスタンス名) ペア単位で重複排除・ソート済み。
 
 CSV が 0 件のときは誤取得の可能性があるため JSON を更新せず失敗する（前回の内容を維持）。販売開始前など正当な 0 件を許可する場合は、リポジトリの **Settings → Secrets and variables → Actions → Variables** に `ALLOW_EMPTY=1` を設定する（ローカルでは env で指定）。
+
+回答を抽出できない行が 1 件でもある場合も中断する（質問文の変更や CSV 形式ズレで一部の購入者が欠けた JSON を配信しないため）。欠損行を除外して続行する場合は `ALLOW_PARTIAL=1` を設定する（GAS 側はスクリプト プロパティ `ALLOW_PARTIAL`）。
 
 ## VRChat ワールド側の実装メモ
 
 - [UdonHashLib](https://github.com/GlitchyDev/UdonHashLib) の `SHA256_UTF8` を使用
 - 照合前の正規化を必ず一致させる: `Networking.LocalPlayer.displayName.Trim().ToLower()`
-- `HASH_SALT` の値を正規化後の文字列に連結してからハッシュ化する
+- ワールドに埋め込む自インスタンス名も同じ正規化（Trim + ToLower）を通し、アンケートの選択肢と一字一句一致させる
+- ハッシュ対象は `正規化した DisplayName + "\n" + 正規化したインスタンス名 + HASH_SALT` の連結文字列
 - `*.github.io` は VRChat の信頼済み URL なので String Loading がデフォルト設定で動く
 
 ## 注意事項
